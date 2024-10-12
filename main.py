@@ -31,30 +31,31 @@ pipe = pipeline(
 )
 
 
-def convert_to_wav(file_path):
+async def convert_to_wav(upload_file: UploadFile) -> BytesIO:
     try:
-        # Load the file as AudioSegment
-        audio = AudioSegment.from_file(file_path)
-        audio = audio.set_frame_rate(16000).set_channels(1)  # Convert to 16kHz, mono
+        # Read the UploadFile asynchronously and convert it into a file-like object
+        file_content = await upload_file.read()  # Read the contents of the file
+        audio = AudioSegment.from_file(BytesIO(file_content))  # Convert to AudioSegment
 
-        # Save the audio to a BytesIO object
+        # Set the sample rate and channels
+        audio = audio.set_frame_rate(16000).set_channels(1)
+
+        # Save to a BytesIO object
         wav_io = BytesIO()
         audio.export(wav_io, format="wav")
         wav_io.seek(0)
         return wav_io
     except Exception as e:
-        print(f"Failed to process audio file: {str(e)}")
-        return None
+        raise HTTPException(status_code=400, detail=f"Failed to process audio file: {str(e)}")
 
 
 def convert_wav_to_numpy(wav_io: BytesIO) -> np.ndarray:
     try:
         wav_io.seek(0)  # Ensure the BytesIO pointer is at the beginning
-        audio_data, sample_rate = librosa.load(wav_io, sr=16000)  # Convert audio to numpy array
+        audio_data, _ = librosa.load(wav_io, sr=16000)  # Convert audio to numpy array with 16kHz
         return audio_data
     except Exception as e:
-        print(f"Failed to convert WAV to numpy: {str(e)}")
-        return None
+        raise HTTPException(status_code=400, detail=f"Failed to convert WAV to numpy: {str(e)}")
 
 
 @app.get("/")
@@ -65,12 +66,15 @@ async def root():
 @app.post("/transcribe/")
 async def transcribe_audio(file: UploadFile = File(...)):
     try:
-        wav_io = convert_to_wav(file)
-        if wav_io:
-            audio_data = convert_wav_to_numpy(wav_io)
-            result = pipe(audio_data, generate_kwargs={"language": "uzbek"})
+        # Convert the uploaded audio file to WAV format
+        wav_io = await convert_to_wav(file)
 
-            return {"transcription": result["text"]}
+        # Convert WAV to numpy array
+        audio_data = convert_wav_to_numpy(wav_io)
+
+        # Perform transcription using the pipeline
+        result = pipe(audio_data, generate_kwargs={"language": "uzbek"})
+        return {"transcription": result["text"]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error during transcription: {str(e)}")
 
