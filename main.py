@@ -2,7 +2,6 @@ import torch
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 from pydub import AudioSegment
-import os
 from io import BytesIO
 import numpy as np
 import librosa
@@ -31,7 +30,6 @@ pipe = pipeline(
     device=device,
 )
 
-
 def convert_to_wav(audio_file: UploadFile) -> BytesIO:
     try:
         audio = AudioSegment.from_file(audio_file.file)
@@ -43,25 +41,21 @@ def convert_to_wav(audio_file: UploadFile) -> BytesIO:
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to process audio file: {str(e)}")
 
-
 def convert_wav_to_numpy(wav_io: BytesIO) -> np.ndarray:
     wav_io.seek(0)  # Reset file pointer to the beginning
     audio_data, sample_rate = librosa.load(wav_io, sr=16000)  # Load audio with 16kHz sample rate
     return audio_data
 
-
 @app.get("/")
 async def root():
     return {"message": "Model is ready for inference"}
 
-
 @app.post("/transcribe/")
 async def transcribe_audio(file: UploadFile = File(...)):
     try:
-        # wav_io = convert_to_wav(file)
-        # audio_data = convert_wav_to_numpy(wav_io)  # Convert to numpy array
-
-        result = pipe(file, generate_kwargs={"language": "uzbek"})
+        wav_io = convert_to_wav(file)
+        audio_data = convert_wav_to_numpy(wav_io)  # Convert to numpy array
+        result = pipe(audio_data, generate_kwargs={"language": "uzbek"})
 
         return {"transcription": result["text"]}
     except Exception as e:
