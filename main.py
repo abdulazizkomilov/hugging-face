@@ -52,34 +52,24 @@ async def convert_to_wav(upload_file: UploadFile) -> BytesIO:
 def convert_wav_to_numpy(wav_io: BytesIO) -> np.ndarray:
     try:
         wav_io.seek(0)  # Ensure the BytesIO pointer is at the beginning
-        audio_data, _ = librosa.load(wav_io, sr=16000)  # Convert audio to numpy array with 16kHz
+        audio_data, _ = librosa.load(wav_io, sr=16000)
         return audio_data
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to convert WAV to numpy: {str(e)}")
-
-
-@app.get("/")
-async def root():
-    return {"message": "Model is ready for inference"}
+        raise HTTPException(status_code=400, detail=f"Failed to convert wav to numpy array: {str(e)}")
 
 
 @app.post("/transcribe/")
 async def transcribe_audio(file: UploadFile = File(...)):
     try:
-        # Convert the uploaded audio file to WAV format
+        # Convert uploaded audio file to WAV format
         wav_io = await convert_to_wav(file)
 
-        # Convert WAV to numpy array
+        # Convert WAV to numpy array for processing
         audio_data = convert_wav_to_numpy(wav_io)
 
-        # Perform transcription using the pipeline
-        result = pipe(audio_data, generate_kwargs={"language": "uzbek"})
-        return {"transcription": result["text"]}
+        # Transcribe the audio with Whisper, with Uzbek language and timestamps
+        result = pipe(audio_data, return_timestamps=True, generate_kwargs={"language": "uzbek"})
+
+        return {"transcription": result["text"], "timestamps": result["chunks"]}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error during transcription: {str(e)}")
-
-
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
