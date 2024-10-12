@@ -33,14 +33,10 @@ pipe = pipeline(
 
 async def convert_to_wav(upload_file: UploadFile) -> BytesIO:
     try:
-        # Read the UploadFile asynchronously and convert it into a file-like object
         file_content = await upload_file.read()  # Read the contents of the file
         audio = AudioSegment.from_file(BytesIO(file_content))  # Convert to AudioSegment
 
-        # Set the sample rate and channels
         audio = audio.set_frame_rate(16000).set_channels(1)
-
-        # Save to a BytesIO object
         wav_io = BytesIO()
         audio.export(wav_io, format="wav")
         wav_io.seek(0)
@@ -58,24 +54,29 @@ def convert_wav_to_numpy(wav_io: BytesIO) -> np.ndarray:
         raise HTTPException(status_code=400, detail=f"Failed to convert wav to numpy array: {str(e)}")
 
 
+def chunk_audio(audio_data: np.ndarray, chunk_size: int = 30000) -> np.ndarray:
+    """Chunk audio data into segments of specified chunk_size."""
+    return [audio_data[i:i + chunk_size] for i in range(0, len(audio_data), chunk_size)]
+
+
 @app.post("/transcribe/")
 async def transcribe_audio(file: UploadFile = File(...)):
     try:
-        # Convert uploaded audio file to WAV format
         wav_io = await convert_to_wav(file)
-        print("file: ", file.filename)
-        print("wav_io: ", wav_io)
-
-        # Convert WAV to numpy array for processing
         audio_data = convert_wav_to_numpy(wav_io)
-        print("audio_data: ", audio_data)
-        result = pipe(audio_data, return_timestamps=True, generate_kwargs={"language": "Uzbek"})
 
-        return {"transcription": result["text"], "timestamps": result["chunks"]}
+        # Chunk the audio data
+        chunks = chunk_audio(audio_data)
+
+        transcription = []
+        timestamps = []
+
+        for chunk in chunks:
+            result = pipe(chunk, return_timestamps=True, generate_kwargs={"language": "uzbek"})
+            transcription.append(result["text"])
+            timestamps.extend(result["chunks"])  # Collect all timestamps
+
+        return {"transcription": " ".join(transcription), "timestamps": timestamps}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
-
-
-"""{
-  "detail": "Error during transcription: You have passed more than 3000 mel input features (> 30 seconds) which automatically enables long-form generation which requires the model to predict timestamp tokens. Please either pass `return_timestamps=True` or make sure to pass no more than 3000 mel input features."
-}"""
