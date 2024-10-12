@@ -30,38 +30,52 @@ pipe = pipeline(
     device=device,
 )
 
-def convert_to_wav(audio_file: UploadFile) -> BytesIO:
+
+def convert_to_wav(file_path):
     try:
-        audio = AudioSegment.from_file(audio_file.file)
-        audio = audio.set_frame_rate(16000).set_channels(1)
+        # Load the file as AudioSegment
+        audio = AudioSegment.from_file(file_path)
+        audio = audio.set_frame_rate(16000).set_channels(1)  # Convert to 16kHz, mono
+
+        # Save the audio to a BytesIO object
         wav_io = BytesIO()
         audio.export(wav_io, format="wav")
         wav_io.seek(0)
         return wav_io
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to process audio file: {str(e)}")
+        print(f"Failed to process audio file: {str(e)}")
+        return None
+
 
 def convert_wav_to_numpy(wav_io: BytesIO) -> np.ndarray:
-    wav_io.seek(0)  # Reset file pointer to the beginning
-    audio_data, sample_rate = librosa.load(wav_io, sr=16000)  # Load audio with 16kHz sample rate
-    return audio_data
+    try:
+        wav_io.seek(0)  # Ensure the BytesIO pointer is at the beginning
+        audio_data, sample_rate = librosa.load(wav_io, sr=16000)  # Convert audio to numpy array
+        return audio_data
+    except Exception as e:
+        print(f"Failed to convert WAV to numpy: {str(e)}")
+        return None
+
 
 @app.get("/")
 async def root():
     return {"message": "Model is ready for inference"}
 
+
 @app.post("/transcribe/")
 async def transcribe_audio(file: UploadFile = File(...)):
     try:
         wav_io = convert_to_wav(file)
-        audio_data = convert_wav_to_numpy(wav_io)  # Convert to numpy array
-        result = pipe(audio_data, generate_kwargs={"language": "uzbek"})
+        if wav_io:
+            audio_data = convert_wav_to_numpy(wav_io)
+            result = pipe(audio_data, generate_kwargs={"language": "uzbek"})
 
-        return {"transcription": result["text"]}
+            return {"transcription": result["text"]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error during transcription: {str(e)}")
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
