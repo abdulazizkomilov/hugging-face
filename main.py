@@ -5,6 +5,9 @@ from pydub import AudioSegment
 from io import BytesIO
 import numpy as np
 import librosa
+import warnings
+
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 app = FastAPI()
 
