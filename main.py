@@ -63,13 +63,19 @@ async def transcribe_audio(file: UploadFile = File(...)):
     try:
         # Convert uploaded audio file to WAV format
         wav_io = await convert_to_wav(file)
+        print("file: ", file.filename)
+        print("wav_io: ", wav_io)
 
         # Convert WAV to numpy array for processing
         audio_data = convert_wav_to_numpy(wav_io)
 
-        # Transcribe the audio with Whisper, with Uzbek language and timestamps
-        result = pipe(audio_data, return_timestamps=True, generate_kwargs={"language": "uzbek"})
+        result = pipe(file, return_timestamps=True, generate_kwargs={"language": "uzbek"})
 
         return {"transcription": result["text"], "timestamps": result["chunks"]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
+
+
+"""{
+  "detail": "Error during transcription: You have passed more than 3000 mel input features (> 30 seconds) which automatically enables long-form generation which requires the model to predict timestamp tokens. Please either pass `return_timestamps=True` or make sure to pass no more than 3000 mel input features."
+}"""
