@@ -20,7 +20,6 @@ model_id = "openai/whisper-large-v3"
 model = AutoModelForSpeechSeq2Seq.from_pretrained(
     model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
 )
-model.generation_config.language = "uzbek"
 model.to(device)
 
 processor = AutoProcessor.from_pretrained(model_id)
@@ -58,29 +57,15 @@ def convert_wav_to_numpy(wav_io: BytesIO) -> np.ndarray:
         raise HTTPException(status_code=400, detail=f"Failed to convert wav to numpy array: {str(e)}")
 
 
-def chunk_audio(audio_data: np.ndarray, chunk_size: int = 30000) -> np.ndarray:
-    """Chunk audio data into segments of specified chunk_size."""
-    return [audio_data[i:i + chunk_size] for i in range(0, len(audio_data), chunk_size)]
-
-
 @app.post("/transcribe/")
 async def transcribe_audio(file: UploadFile = File(...)):
     try:
         wav_io = await convert_to_wav(file)
         audio_data = convert_wav_to_numpy(wav_io)
 
-        # Chunk the audio data
-        chunks = chunk_audio(audio_data)
+        result = pipe(audio_data, generate_kwargs={"language": "uzbek"})
 
-        transcription = []
-        timestamps = []
-
-        for chunk in chunks:
-            result = pipe(chunk, return_timestamps=True)
-            transcription.append(result["text"])
-            timestamps.extend(result["chunks"])  # Collect all timestamps
-
-        return {"transcription": " ".join(transcription), "timestamps": timestamps}
+        return {"transcription": result}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
