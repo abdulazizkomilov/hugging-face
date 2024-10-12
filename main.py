@@ -68,8 +68,8 @@ async def transcribe_audio(file: UploadFile = File(...)):
 
         # Convert WAV to numpy array for processing
         audio_data = convert_wav_to_numpy(wav_io)
-
-        result = pipe(file, return_timestamps=True, generate_kwargs={"language": "uzbek"})
+        print("audio_data: ", audio_data)
+        result = pipe(audio_data, return_timestamps=True, generate_kwargs={"language": "Uzbek"})
 
         return {"transcription": result["text"], "timestamps": result["chunks"]}
     except Exception as e:
