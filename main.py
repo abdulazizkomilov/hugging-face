@@ -44,6 +44,12 @@ def convert_to_wav(audio_file: UploadFile) -> BytesIO:
         raise HTTPException(status_code=400, detail=f"Failed to process audio file: {str(e)}")
 
 
+def convert_wav_to_numpy(wav_io: BytesIO) -> np.ndarray:
+    wav_io.seek(0)  # Reset file pointer to the beginning
+    audio_data, sample_rate = librosa.load(wav_io, sr=16000)  # Load audio with 16kHz sample rate
+    return audio_data
+
+
 @app.get("/")
 async def root():
     return {"message": "Model is ready for inference"}
@@ -52,8 +58,10 @@ async def root():
 @app.post("/transcribe/")
 async def transcribe_audio(file: UploadFile = File(...)):
     try:
-        wav_io = convert_to_wav(file)
-        result = pipe(wav_io, generate_kwargs={"language": "uzbek"})
+        # wav_io = convert_to_wav(file)
+        # audio_data = convert_wav_to_numpy(wav_io)  # Convert to numpy array
+
+        result = pipe(file, generate_kwargs={"language": "uzbek"})
 
         return {"transcription": result["text"]}
     except Exception as e:
@@ -62,5 +70,4 @@ async def transcribe_audio(file: UploadFile = File(...)):
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=8000)
