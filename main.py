@@ -11,8 +11,8 @@ app = FastAPI()
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
-model_id = "openai/whisper-large-v3"
-# model_id = "openai/whisper-tiny"
+# model_id = "openai/whisper-large-v3"
+model_id = "openai/whisper-tiny"
 
 model = AutoModelForSpeechSeq2Seq.from_pretrained(
     model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
@@ -74,8 +74,3 @@ async def transcribe_audio(file: UploadFile = File(...)):
         return {"transcription": result["text"], "timestamps": result["chunks"]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
-
-
-"""{
-  "detail": "Error during transcription: You have passed more than 3000 mel input features (> 30 seconds) which automatically enables long-form generation which requires the model to predict timestamp tokens. Please either pass `return_timestamps=True` or make sure to pass no more than 3000 mel input features."
-}"""

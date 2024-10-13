@@ -1,28 +1,40 @@
-# To learn more about how to use Nix to configure your environment
-# see: https://developers.google.com/idx/guides/customize-idx-env
 { pkgs, ... }: {
-  # Which nixpkgs channel to use.
-  channel = "stable-24.05"; # or "unstable"
-  # Use https://search.nixos.org/packages to find packages
-  packages = [ 
-    pkgs.python3
-    pkgs.ffmpeg
-    pkgs.poetry
-    pkgs.gcc
-    ];
+  # Specify the Nixpkgs channel.
+  channel = "stable-24.05"; # Use "unstable" if you need newer packages.
+
+  # List of packages required for the environment.
+  packages = [
+    pkgs.python311        # Use Python 3.11.
+    pkgs.gcc              # Include GCC for compiling C/C++ dependencies.
+    pkgs.libffi           # Required for ctypes and FFI support.
+    pkgs.ffmpeg           # For audio/video processing.
+    pkgs.poetry           # Dependency management tool.
+    pkgs.redis            # Redis for caching and task queues.
+  ];
+
   idx = {
-    # Search for the extensions you want on https://open-vsx.org/ and use "publisher.id"
-    extensions = [ "ms-python.python" "rangav.vscode-thunder-client" ];
+    # Extensions to install in your IDE (Visual Studio Code / IDX).
+    extensions = [
+      "ms-python.python"             # Python extension for VS Code.
+      "rangav.vscode-thunder-client" # Thunder Client for API testing.
+    ];
+
     workspace = {
-      # Runs when a workspace is first created with this `dev.nix` file
+      # Commands to run when the workspace is created for the first time.
       onCreate = {
-        install =
-          "python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt";
-        # Open editors for the following files by default, if they exist:
+        install = ''
+          python -m venv .venv 
+          source .venv/bin/activate 
+          pip install -r requirements.txt
+        '';
+        # Default files to open in the editor.
         default.openFiles = [ "README.md" "src/index.html" "main.py" ];
       };
-      # Runs when a workspace is (re)started
-      onStart = { run-server = "./devserver.sh"; };
+
+      # Commands to run every time the workspace starts or restarts.
+      onStart = {
+        run-server = "./devserver.sh"; # Run your development server script.
+      };
     };
   };
 }
