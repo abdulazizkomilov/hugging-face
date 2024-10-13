@@ -5,19 +5,16 @@ from pydub import AudioSegment
 from io import BytesIO
 import numpy as np
 import librosa
-import json
-import wave
-from fastapi.responses import JSONResponse
-from celery.result import AsyncResult
-from celery_app import celery_app
+from tempfile import NamedTemporaryFile
+import os
 
 app = FastAPI()
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
-model_id = "openai/whisper-large-v3"
-# model_id = "openai/whisper-tiny"
+# model_id = "openai/whisper-large-v3"
+model_id = "openai/whisper-tiny"
 
 model = AutoModelForSpeechSeq2Seq.from_pretrained(
     model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
@@ -26,14 +23,14 @@ model.to(device)
 
 processor = AutoProcessor.from_pretrained(model_id)
 
-pipe = pipeline("automatic-speech-recognition", model="openai/whisper-large-v3")
-
-
-@celery_app.task
-def transcribe_audio_task(audio_data):
-    """Process audio data using a transcription pipeline."""
-    result = pipe(audio_data, return_timestamps=True, generate_kwargs={"language": "uzbek"})
-    return {"text": result["text"], "timestamps": result["chunks"]}
+pipe = pipeline(
+    "automatic-speech-recognition",
+    model=model,
+    tokenizer=processor.tokenizer,
+    feature_extractor=processor.feature_extractor,
+    torch_dtype=torch_dtype,
+    device=device,
+)
 
 
 async def convert_to_wav(upload_file: UploadFile) -> BytesIO:
@@ -63,40 +60,38 @@ def convert_wav_to_numpy(wav_io: BytesIO) -> np.ndarray:
         raise HTTPException(status_code=400, detail=f"Failed to convert wav to numpy array: {str(e)}")
 
 
-# @app.post("/transcribe/")
-# async def transcribe_audio(file: UploadFile = File(...)):
-#     try:
-#         # Convert uploaded audio file to WAV format
-#         wav_io = await convert_to_wav(file)
-#         print("file: ", file.filename)
-#         print("wav_io: ", wav_io)
-#
-#         # Convert WAV to numpy array for processing
-#         audio_data = convert_wav_to_numpy(wav_io)
-#         print("audio_data: ", audio_data)
-#         result = pipe(audio_data, return_timestamps=True, generate_kwargs={"language": "Uzbek"})
-#
-#         return {"transcription": result["text"], "timestamps": result["chunks"]}
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
+def download(file: UploadFile) -> str:
+    """Download the uploaded file and return its temporary file path."""
+    try:
+        temp_file = NamedTemporaryFile(delete=False, suffix=".mp3")  # Adjust suffix as needed
+        with temp_file as f:
+            f.write(file.file.read())  # Save the uploaded file to disk
+        return temp_file.name
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+
+
+def delete(file_path: str):
+    """Delete the temporary file."""
+    try:
+        os.remove(file_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete file: {str(e)}")
 
 
 @app.post("/transcribe/")
 async def transcribe_audio(file: UploadFile = File(...)):
-    wav_io = await convert_to_wav(file)
-    audio_data = convert_wav_to_numpy(wav_io)  # Ensure it's a list
+    """Handle audio transcription."""
+    try:
+        # Download the file to a temporary location
+        file_path = download(file)
 
-    result = pipe(audio_data, return_timestamps=True, generate_kwargs={"language": "uzbek"})
-    content = {"task_id": result, "status": "Processing"}
-    return content
+        # Perform transcription
+        result = pipe(file_path, return_timestamps=True, generate_kwargs={"language": "Uzbek"})
 
+        # Clean up the temporary file
+        delete(file_path)
 
-@app.get("/transcribe/{task_id}")
-async def get_transcription_result(task_id: str):
-    task = AsyncResult(task_id)
-    if task.state == "PENDING":
-        return {"status": "Processing"}
-    elif task.state == "SUCCESS":
-        return task.result
-    else:
-        raise HTTPException(status_code=500, detail="Task failed")
+        return {"transcription": result["text"], "timestamps": result["chunks"]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
