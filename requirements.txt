@@ -45,7 +45,7 @@ networkx
 numba
 numpy
 packaging==24.1
-pandas==2.2.3
+pandas
 platformdirs==4.3.6
 pooch==1.8.2
 prompt_toolkit==3.0.48
