@@ -16,8 +16,8 @@ async def root():
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
-# model_id = "openai/whisper-tiny"
-model_id = "openai/whisper-large-v3"
+model_id = "openai/whisper-tiny"
+# model_id = "openai/whisper-large-v3"
 
 model = AutoModelForSpeechSeq2Seq.from_pretrained(
     model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
@@ -59,7 +59,7 @@ async def transcribe_audio(files: List[UploadFile] = File(...)):
             file_path = save_temp_file(file)
             file_paths.append(file_path)
 
-            result = pipe(file_path)
+            result = pipe(file_path, generate_kwargs={"language": "en"})
             transcriptions.append({
                 "filename": file.filename,
                 "transcription": result["text"]
