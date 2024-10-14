@@ -59,7 +59,7 @@ async def transcribe_audio(files: List[UploadFile] = File(...)):
             file_path = save_temp_file(file)
             file_paths.append(file_path)
 
-            result = pipe(file_path, generate_kwargs={"language": "en"})
+            result = pipe(file_path)
             transcriptions.append({
                 "filename": file.filename,
                 "transcription": result["text"]
