@@ -1,7 +1,7 @@
 version: '3'
 services:
   fastapi_model:
-    image: fastapi-model
+    image: fastapi-model:latest
     ports:
       - "8000"
     deploy:
