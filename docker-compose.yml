@@ -4,16 +4,26 @@ services:
   fastapi-app:
     build: .
     container_name: fastapi-gpu
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     deploy:
       resources:
         reservations:
           devices:
-            - capabilities: [gpu]
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+            - capabilities: [ gpu ]
     volumes:
       - ./audios:/app/audios
     runtime: nvidia
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - fastapi-app
