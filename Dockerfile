@@ -9,6 +9,7 @@ COPY . /app
 
 # Install FastAPI, Uvicorn, transformers, accelerate, and other necessary Python libraries
 RUN pip install --no-cache-dir fastapi uvicorn transformers torch torchvision torchaudio accelerate
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Install additional system dependencies for FFmpeg (required for audio processing)
 RUN apt-get update && apt-get install -y ffmpeg
