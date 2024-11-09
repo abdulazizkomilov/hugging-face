@@ -16,7 +16,7 @@ device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
 # Custom model path
-MODEL_PATH = "./stt_model"  # O'z modelingiz papkasiga yo'lni ko'rsating
+MODEL_PATH = "./stt_model/medium-wav2vec-1"  # O'z modelingiz papkasiga yo'lni ko'rsating
 
 # Load model and processor at startup
 logging.info("Loading custom STT model...")
