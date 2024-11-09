@@ -6,7 +6,7 @@ import aiofiles
 import torchaudio
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from typing import List
-from transformers import pipeline, Wav2Vec2ForCTC
+from transformers import pipeline, Wav2Vec2ForCTC, Wav2Vec2Processor
 
 # Set device and dtype
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -14,6 +14,11 @@ torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
 # Custom model path
 MODEL_PATH = "./stt_model/medium-wav2vec-1"  # Path to your model folder
+
+logging.info("Loading custom STT model and tokenizer...")
+model = Wav2Vec2ForCTC.from_pretrained(MODEL_PATH).to(device)
+processor = Wav2Vec2Processor.from_pretrained(MODEL_PATH)  # Loads tokenizer and feature extractor
+
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -27,6 +32,8 @@ model.eval()
 asr_pipeline = pipeline(
     "automatic-speech-recognition",
     model=model,
+    tokenizer=processor.tokenizer,
+    feature_extractor=processor.feature_extractor,
     torch_dtype=torch_dtype,
     device=0 if torch.cuda.is_available() else -1
 )
