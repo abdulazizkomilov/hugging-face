@@ -6,7 +6,7 @@ import aiofiles
 import torchaudio
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from typing import List
-from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
+from transformers import pipeline
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -15,23 +15,27 @@ logging.basicConfig(level=logging.INFO)
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
-# Model ID
-MODEL_ID = "openai/whisper-tiny"
+# Custom model path
+MODEL_PATH = "./stt_model"  # O'z modelingiz papkasiga yo'lni ko'rsating
 
 # Load model and processor at startup
-logging.info("Loading model and processor...")
-model = AutoModelForSpeechSeq2Seq.from_pretrained(
-    MODEL_ID, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
-).to(device)
+logging.info("Loading custom STT model...")
+model = torch.load(os.path.join(MODEL_PATH, "model.pth"), map_location=device)
+model.to(device)
+model.eval()
 
-processor = AutoProcessor.from_pretrained(MODEL_ID)
+# Model token va feature extractor agar kerak bo'lsa
+# Bular sizda mavjud STT model turiga bog'liq, Whisper model emasligi uchun tokenizer va feature extractor farq qilishi mumkin.
+# Agar kerak bo'lsa, quyidagi kabi kod orqali yuklab oling:
+# tokenizer = <YOUR TOKENIZER>
+# feature_extractor = <YOUR FEATURE EXTRACTOR>
 
-# Initialize pipeline
+# Initialize ASR pipeline
 asr_pipeline = pipeline(
     "automatic-speech-recognition",
     model=model,
-    tokenizer=processor.tokenizer,
-    feature_extractor=processor.feature_extractor,
+    # tokenizer=tokenizer,  # Agar kerak bo'lsa
+    # feature_extractor=feature_extractor,  # Agar kerak bo'lsa
     torch_dtype=torch_dtype,
     device=device,
 )
@@ -47,7 +51,7 @@ app = FastAPI()
 @app.get("/")
 async def root():
     """Health check."""
-    return {"message": "Model is ready for inference"}
+    return {"message": "Custom STT Model is ready for inference"}
 
 
 async def save_temp_file(file: UploadFile) -> str:
