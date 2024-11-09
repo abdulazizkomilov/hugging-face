@@ -6,38 +6,29 @@ import aiofiles
 import torchaudio
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from typing import List
-from transformers import pipeline
-
-# Initialize logging
-logging.basicConfig(level=logging.INFO)
+from transformers import pipeline, Wav2Vec2ForCTC
 
 # Set device and dtype
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
 # Custom model path
-MODEL_PATH = "./stt_model/medium-wav2vec-1"  # O'z modelingiz papkasiga yo'lni ko'rsating
+MODEL_PATH = "./stt_model/medium-wav2vec-1"  # Path to your model folder
 
-# Load model and processor at startup
+# Initialize logging
+logging.basicConfig(level=logging.INFO)
+
+# Load model at startup
 logging.info("Loading custom STT model...")
-model = torch.load(os.path.join(MODEL_PATH, "model.pth"), map_location=device)
-model.to(device)
+model = Wav2Vec2ForCTC.from_pretrained(MODEL_PATH).to(device)
 model.eval()
-
-# Model token va feature extractor agar kerak bo'lsa
-# Bular sizda mavjud STT model turiga bog'liq, Whisper model emasligi uchun tokenizer va feature extractor farq qilishi mumkin.
-# Agar kerak bo'lsa, quyidagi kabi kod orqali yuklab oling:
-# tokenizer = <YOUR TOKENIZER>
-# feature_extractor = <YOUR FEATURE EXTRACTOR>
 
 # Initialize ASR pipeline
 asr_pipeline = pipeline(
     "automatic-speech-recognition",
     model=model,
-    # tokenizer=tokenizer,  # Agar kerak bo'lsa
-    # feature_extractor=feature_extractor,  # Agar kerak bo'lsa
     torch_dtype=torch_dtype,
-    device=device,
+    device=0 if torch.cuda.is_available() else -1
 )
 
 # Audio directory
@@ -114,7 +105,7 @@ async def transcribe_audio(files: List[UploadFile] = File(...)):
         results = []
         for batch_start in range(0, len(file_paths), 2):  # Batch size = 2
             batch_files = file_paths[batch_start:batch_start + 2]
-            batch_results = asr_pipeline(batch_files, generate_kwargs={"language": "en"})
+            batch_results = asr_pipeline(batch_files)
             results.extend(batch_results)
 
         # Format the response
