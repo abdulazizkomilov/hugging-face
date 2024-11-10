@@ -16,7 +16,7 @@ AUDIO_DIR = "./audios"
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
 # Model initialization
-model_id = "/stt_model/medium-wav2vec-1"
+model_id = "./stt_model/medium-wav2vec-1"
 
 try:
     processor = Wav2Vec2Processor.from_pretrained(model_id)
