@@ -1,21 +1,19 @@
-# Use official PyTorch image with CUDA support
-FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime
+FROM nvidia/cuda:11.3.0-cudnn8-runtime-ubuntu20.04
 
-# Set working directory
 WORKDIR /app
 
-# Copy all files to the container
+RUN apt-get update && \
+    apt-get install -y python3 python3-pip ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --no-cache-dir torch torchvision torchaudio \
+    --extra-index-url https://download.pytorch.org/whl/cu113 && \
+    pip3 install --no-cache-dir fastapi uvicorn transformers accelerate
+
 COPY . /app
 
-# Install FastAPI, Uvicorn, transformers, accelerate, and other necessary Python libraries
-RUN pip install --no-cache-dir fastapi uvicorn transformers torch torchvision torchaudio accelerate
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Install additional system dependencies for FFmpeg (required for audio processing)
-RUN apt-get update && apt-get install -y ffmpeg
-
-# Expose the default FastAPI port
 EXPOSE 8000
 
-# Run the FastAPI app with Uvicorn and multiple workers
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
