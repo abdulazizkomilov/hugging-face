@@ -6,50 +6,25 @@ import aiofiles
 import torchaudio
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from typing import List
-from transformers import pipeline, Wav2Vec2ForCTC, Wav2Vec2Processor
+from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
 
-# Set device and dtype
-device = "cuda:0" if torch.cuda.is_available() else "cpu"
-torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-
-# Custom model path
-MODEL_PATH = "./stt_model/medium-wav2vec-1"  # Path to your model folder
-
-logging.info("Loading custom STT model and tokenizer...")
-model = Wav2Vec2ForCTC.from_pretrained(MODEL_PATH).to(device)
-processor = Wav2Vec2Processor.from_pretrained(MODEL_PATH)  # Loads tokenizer and feature extractor
-
-
-# Initialize logging
-logging.basicConfig(level=logging.INFO)
-
-# Load model at startup
-logging.info("Loading custom STT model...")
-model = Wav2Vec2ForCTC.from_pretrained(MODEL_PATH).to(device)
-model.eval()
-
-# Initialize ASR pipeline
-asr_pipeline = pipeline(
-    "automatic-speech-recognition",
-    model=model,
-    tokenizer=processor.tokenizer,
-    feature_extractor=processor.feature_extractor,
-    torch_dtype=torch_dtype,
-    device=0 if torch.cuda.is_available() else -1
-)
+# Initialize FastAPI app
+app = FastAPI()
 
 # Audio directory
 AUDIO_DIR = "./audios"
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
-# FastAPI app
-app = FastAPI()
+# Model initialization
+model_id = "/stt_model/medium-wav2vec-1"
 
-
-@app.get("/")
-async def root():
-    """Health check."""
-    return {"message": "Custom STT Model is ready for inference"}
+try:
+    processor = Wav2Vec2Processor.from_pretrained(model_id)
+    model = Wav2Vec2ForCTC.from_pretrained(model_id)
+    model.eval()
+    print("Model and processor loaded successfully.")
+except Exception as e:
+    raise RuntimeError(f"Error loading model or processor: {e}")
 
 
 async def save_temp_file(file: UploadFile) -> str:
@@ -69,63 +44,64 @@ def preprocess_audio(file_path: str) -> str:
         logging.info(f"Resampling {file_path} from {sample_rate}Hz to 16000Hz.")
         resampler = torchaudio.transforms.Resample(orig_freq=sample_rate, new_freq=16000)
         waveform = resampler(waveform)
-
         resampled_path = f"{file_path}_resampled.wav"
         torchaudio.save(resampled_path, waveform, 16000)
         return resampled_path
-
     return file_path
 
 
-def split_long_audio(file_path: str, max_duration: int = 30) -> List[str]:
-    """Split audio into smaller chunks if it exceeds max_duration."""
-    waveform, sample_rate = torchaudio.load(file_path)
-    total_duration = waveform.shape[1] / sample_rate
+def transcribe_audio_file(file_path: str, model, processor) -> str:
+    """Process and transcribe audio file using ASR model."""
+    # Load audio data
+    audio, _ = torchaudio.load(file_path)
+    audio = audio.squeeze().numpy()  # Remove extra dimensions for processing
 
-    if total_duration <= max_duration:
-        return [file_path]
+    # Process with the processor
+    inputs = processor(audio, sampling_rate=16000, return_tensors="pt", padding=True)
 
-    logging.info(f"Splitting {file_path} into {max_duration}-second chunks.")
-    chunks = []
-    for i in range(0, int(total_duration), max_duration):
-        chunk = waveform[:, i * sample_rate:(i + max_duration) * sample_rate]
-        chunk_path = f"{file_path}_chunk_{i}.wav"
-        torchaudio.save(chunk_path, chunk, sample_rate)
-        chunks.append(chunk_path)
+    # Model inference
+    with torch.no_grad():
+        logits = model(inputs.input_values, attention_mask=inputs.attention_mask).logits
+    predicted_ids = torch.argmax(logits, dim=-1)
+    transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
+    return transcription
 
-    return chunks
+
+@app.get("/")
+async def root():
+    """Health check."""
+    return {"message": "ASR Model is ready for inference"}
 
 
 @app.post("/transcribe/")
 async def transcribe_audio(files: List[UploadFile] = File(...)):
-    """Transcribe multiple audio files with proper batching."""
+    """Transcribe multiple audio files asynchronously with batch processing."""
     file_paths = []
+    transcriptions = []
 
     try:
         # Save and preprocess audio files
         for file in files:
             file_path = await save_temp_file(file)
             processed_path = preprocess_audio(file_path)
-            file_paths.extend(split_long_audio(processed_path))
+            file_paths.append(processed_path)
 
-        # Perform transcription in batches
-        results = []
-        for batch_start in range(0, len(file_paths), 2):  # Batch size = 2
+        # Transcribe in batches
+        for batch_start in range(0, len(file_paths), 2):  # Batch size of 2
             batch_files = file_paths[batch_start:batch_start + 2]
-            batch_results = asr_pipeline(batch_files)
-            results.extend(batch_results)
+            batch_results = [transcribe_audio_file(file, model, processor) for file in batch_files]
+            transcriptions.extend(batch_results)
 
         # Format the response
-        transcriptions = [
-            {"filename": os.path.basename(file), "transcription": result["text"]}
-            for file, result in zip(file_paths, results)
+        response = [
+            {"filename": os.path.basename(file_path), "transcription": transcription}
+            for file_path, transcription in zip(file_paths, transcriptions)
         ]
-
-        return {"transcriptions": transcriptions}
+        return {"transcriptions": response}
 
     except Exception as e:
-        logging.error(f"Transcription failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
+        logging.error(f"Transcription failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {e}")
 
     finally:
         # Cleanup temporary files
