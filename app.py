@@ -38,12 +38,13 @@ def get_asr_result(audio_path, model, processor, sr=16000):
 
     # Prepare inputs and move them to the appropriate device
     inputs = processor(audio, sampling_rate=sr, return_tensors="pt", padding=True)
-    inputs = {k: v.to(device) for k, v in inputs.items()}
+    input_values = inputs["input_values"].to(device)
+    attention_mask = inputs["attention_mask"].to(device)
 
     # Perform inference with mixed precision if available
     with torch.no_grad():
-        with torch.cuda.amp.autocast():
-            logits = model(inputs.input_values, attention_mask=inputs.attention_mask).logits
+        with torch.amp.autocast("cuda"):  # Updated autocast syntax
+            logits = model(input_values, attention_mask=attention_mask).logits
 
     # Decode the logits to obtain the transcription
     predicted_ids = torch.argmax(logits, dim=-1)
