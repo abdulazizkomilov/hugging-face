@@ -27,6 +27,7 @@ try:
 except Exception as e:
     raise RuntimeError(f"Error loading model or processor: {e}")
 
+
 # Save file asynchronously
 async def save_temp_file(file: UploadFile) -> str:
     unique_filename = f"{uuid.uuid4()}.wav"
@@ -36,12 +37,15 @@ async def save_temp_file(file: UploadFile) -> str:
         await f.write(content)
     return file_path
 
+
 # Preprocess audio by resampling to 16kHz
 def preprocess_audio(file_path: str) -> torch.Tensor:
     waveform, sample_rate = torchaudio.load(file_path)
     if sample_rate != SAMPLING_RATE:
         waveform = torchaudio.transforms.Resample(orig_freq=sample_rate, new_freq=SAMPLING_RATE)(waveform)
+    waveform = waveform.squeeze(0)  # Remove any extra channel dimension
     return waveform
+
 
 # Transcribe a batch of audio tensors
 def batch_transcribe_audio(audio_tensors: List[torch.Tensor], model, processor) -> List[str]:
@@ -61,9 +65,11 @@ def batch_transcribe_audio(audio_tensors: List[torch.Tensor], model, processor) 
     transcriptions = processor.batch_decode(predicted_ids, skip_special_tokens=True)
     return transcriptions
 
+
 @app.get("/")
 async def root():
     return {"message": "ASR Model is ready for inference"}
+
 
 @app.post("/transcribe/")
 async def transcribe_audio(files: List[UploadFile] = File(...)):
@@ -100,6 +106,8 @@ async def transcribe_audio(files: List[UploadFile] = File(...)):
             if os.path.exists(path):
                 os.remove(path)
 
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
