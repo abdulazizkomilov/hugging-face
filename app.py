@@ -47,13 +47,16 @@ def preprocess_audio(file_path: str) -> torch.Tensor:
 
 def batch_transcribe_audio(audio_tensors: List[torch.Tensor], model, processor) -> List[str]:
     """Process and transcribe audio tensors in batches."""
-    # Pad and stack audio tensors
+    # Prepare inputs for the processor
     inputs = processor(audio_tensors, sampling_rate=16000, return_tensors="pt", padding=True)
-    inputs = {k: v.to("cuda") for k, v in inputs.items()}  # Move inputs to GPU
+
+    # Move the inputs to GPU
+    input_values = inputs["input_values"].to("cuda")
+    attention_mask = inputs["attention_mask"].to("cuda") if "attention_mask" in inputs else None
 
     # Model inference
     with torch.no_grad():
-        logits = model(inputs.input_values, attention_mask=inputs.attention_mask).logits
+        logits = model(input_values, attention_mask=attention_mask).logits
 
     # Decode predictions
     predicted_ids = torch.argmax(logits, dim=-1)
