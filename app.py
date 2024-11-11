@@ -7,22 +7,32 @@ import torchaudio
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from typing import List
 from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
+from decouple import config
 
 app = FastAPI()
 
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Set audio storage directory
 AUDIO_DIR = "./audios"
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
-model_id = "./stt_model/medium-wav2vec-1"
+# Set device for inference
 device = "cuda" if torch.cuda.is_available() else "cpu"
+logger.info(f"Running on device: {device}")
 
+# Load model and processor
+model_id = config("MODEL_ID")
 try:
     processor = Wav2Vec2Processor.from_pretrained(model_id)
     model = Wav2Vec2ForCTC.from_pretrained(model_id).to(device)
     model.eval()
     model.gradient_checkpointing_enable()  # Enable gradient checkpointing
-    print("Model and processor loaded successfully.")
+    logger.info("Model and processor loaded successfully.")
 except Exception as e:
+    logger.error(f"Error loading model or processor: {e}")
     raise RuntimeError(f"Error loading model or processor: {e}")
 
 
@@ -43,12 +53,16 @@ def get_asr_result(audio_path, model, processor, sr=16000, chunk_duration=10):
         attention_mask = inputs["attention_mask"].to(device)
 
         with torch.no_grad():
-            with torch.amp.autocast("cuda"):
+            with torch.amp.autocast("cuda", enabled=(device == "cuda")):  # Updated autocast syntax
                 logits = model(input_values, attention_mask=attention_mask).logits
 
         predicted_ids = torch.argmax(logits, dim=-1)
         transcription = processor.batch_decode(predicted_ids)[0]
         transcriptions.append(transcription)
+
+        # Clear memory after processing each chunk
+        del input_values, attention_mask, logits
+        torch.cuda.empty_cache()
 
     return " ".join(transcriptions)
 
@@ -82,7 +96,6 @@ async def transcribe_audio(files: List[UploadFile] = File(...)):
         for file_path in file_paths:
             transcription = get_asr_result(file_path, model, processor)
             transcriptions.append(transcription)
-            torch.cuda.empty_cache()  # Free CUDA memory after each inference
 
         response = [
             {"filename": os.path.basename(file_path), "transcription": transcription}
@@ -91,7 +104,7 @@ async def transcribe_audio(files: List[UploadFile] = File(...)):
         return {"transcriptions": response}
 
     except Exception as e:
-        logging.error(f"Transcription failed: {e}")
+        logger.error(f"Transcription failed: {e}")
         raise HTTPException(status_code=500, detail=f"Transcription failed: {e}")
 
     finally:
@@ -99,6 +112,7 @@ async def transcribe_audio(files: List[UploadFile] = File(...)):
         for path in file_paths:
             if os.path.exists(path):
                 os.remove(path)
+                logger.info(f"Deleted temporary file: {path}")
 
 
 if __name__ == "__main__":
